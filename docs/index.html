@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><title>Running Kubernetes in production, using Kops</title><meta content="yes" name="apple-mobile-web-app-capable" /><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" /><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" name="viewport" /><link href="reveal.js/css/reveal.css" rel="stylesheet" /><link rel="stylesheet" href="reveal.js/css/theme/black.css" id="theme" /><link href="reveal.js/lib/css/zenburn.css" rel="stylesheet" /><script>var link = document.createElement( 'link' );
+link.rel = 'stylesheet';
+link.type = 'text/css';
+link.href = window.location.search.match( /print-pdf/gi ) ? "reveal.js/css/print/pdf.css" : "reveal.js/css/print/paper.css";
+document.getElementsByTagName( 'head' )[0].appendChild( link );</script><!--[if lt IE 9]><script src="reveal.js/lib/js/html5shiv.js"></script><![endif]--></head><body><div class="reveal"><div class="slides"><section class="title" data-state="title"><h1>Running Kubernetes in production, using Kops</h1><div class="preamble"><div class="paragraph"><p>Mark O&#8217;Connor, Teamwork</p></div></div></section>
+<section><section id="but_what_did_kubernetes_ever_do_for_us"><h2>But what did Kubernetes ever do for us?</h2><div class="imageblock" style=""><img src="https://i.ytimg.com/vi/Y7tvauOJMHo/hqdefault.jpg" alt="hqdefault" /></div></section><section id="clouds"><h2>Clouds</h2><div class="imageblock" style=""><img src="http://3thlkd3wpu0u1x0qbt19cxc8-wpengine.netdna-ssl.com/wp-content/uploads/2015/05/cloudstorage.jpg" alt="cloudstorage" /></div>
+<div class="ulist"><ul><li><p>Scaling up is hard</p></li><li><p>Applications can be spread across lots of servers</p></li></ul></div></section><section id="resiliency"><h2>Resiliency</h2><div class="imageblock" style=""><img src="http://www.maxta.com/wp-content/uploads/disasterrecovery-300x265.gif" alt="disasterrecovery 300x265" /></div>
+<div class="ulist"><ul><li><p>Automate recovery</p></li><li><p>Relocatable workloads</p></li></ul></div></section><section id="efficient_workload_placement"><h2>Efficient workload placement</h2><div class="imageblock" style=""><img src="https://storage.googleapis.com/cdn.thenewstack.io/media/2016/05/command-after-1024x522.gif" alt="command after 1024x522" /></div></section><section id="google_s_solution"><h2>Google&#8217;s solution</h2><div class="imageblock" style=""><img src="https://upload.wikimedia.org/wikipedia/en/a/a1/Picard_as_Locutus.jpg" alt="Picard as Locutus" /></div>
+<div class="paragraph"><p>Datacenter operating system managing container workloads</p></div></section><section id="kubernetes"><h2>Kubernetes</h2><div class="ulist"><ul><li><p>Borg&#8217;s little brother, originally called "Seven of Nine"!</p></li><li><p>Version 2 of something Google has been running for a while</p></li><li><p>Designed to scale out Docker, but no longer dependent on a single container runtime</p></li></ul></div></section></section>
+<section><section id="meanwhile_at_teamwork"><h2>Meanwhile at Teamwork</h2><div class="ulist"><ul><li><p>Using Kubernetes in production for approx 18 months</p></li><li><p>Use the community <strong>kops</strong> tool to standup HA clusters on AWS infrastructure</p></li><li><p>Still evaluating EKS</p></li></ul></div></section><section id="why_kops"><h2>Why Kops?</h2><div class="ulist"><ul><li><p>Simple to use</p></li><li><p>Robust and resilient</p></li><li><p>With helm supports rollback</p></li><li><p>Relies on AWS constructs such as Autoscalling groups to provide resiliency across AZs</p></li><li><p>Supports spot instances</p></li></ul></div></section><section id="how_big"><h2>How big?</h2><div class="ulist"><ul><li><p>Operate in two AWS regions, with a Kubernetes cluster in each</p></li><li><p>Each cluster is HA with approx 30 worker nodes</p></li></ul></div></section></section>
+<section><section id="demo_time"><h2>Demo time</h2><div class="paragraph"><p>Go Teamwork!</p></div></section><section id="cluster_manifest"><h2>Cluster manifest</h2><div class="listingblock"><div class="content"><pre class="highlight"><code>kops create cluster --name moc-dev1.k8s.local \
+   --master-zones us-east-1b \
+   --master-size r4.large \
+   --zones us-east-1b \
+   --node-size r4.xlarge \
+   --node-count 2 \
+   --cloud-labels TWApp=Kubernetes \
+   --admin-access 77.107.218.234/32 \
+   --vpc $VPC \
+   --authorization RBAC \
+   --dry-run \
+   -o yaml &gt; moc-dev1.k8s.local.clusterspec.yaml</code></pre></div></div></section><section id="go"><h2>Go!</h2><div class="paragraph"><p>Write the spec to the S3 backend</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code>kops create -f $NAME.clusterspec.yaml
+kops create secret --name $NAME sshpublickey admin -i ~/.ssh/clusterkey.pub</code></pre></div></div>
+<div class="paragraph"><p>Generate all the AWS resources</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code>kops update cluster --name $NAME --yes</code></pre></div></div></section><section id="wait"><h2>Wait&#8230;&#8203;</h2><div class="listingblock"><div class="content"><pre class="highlight"><code>kops validate cluster --name $NAME</code></pre></div></div></section><section id="post_installation"><h2>Post installation</h2><div class="paragraph"><p>Install helm</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code>kubectl -n kube-system create serviceaccount tiller
+kubectl create clusterrolebinding cluster-admin-tiller \
+   --clusterrole=cluster-admin \
+   --serviceaccount=kube-system:tiller
+
+helm init --service-account tiller</code></pre></div></div></section><section id="post_installation_2"><h2>Post installation</h2><div class="paragraph"><p>Install the cluster services</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code>helmfile apply --auto-approve</code></pre></div></div></section></section>
+<section><section id="time_for_a_second_demo"><h2>Time for a second demo??</h2></section><section id="upgrade"><h2>Upgrade</h2><div class="listingblock"><div class="content"><pre class="highlight"><code>kops-1.10.1 upgrade cluster --name $NAME
+kops-1.10.1 update cluster --name $NAME --yes
+kops-1.10.1 rolling-update cluster --name $NAME --yes</code></pre></div></div></section></section>
+<section id="how_you_enjoyed_the_presentation"><h2>How you enjoyed the presentation</h2><div class="ulist"><ul><li><p>Mark O&#8217;Connor</p></li><li><p><a href="mailto:mark@myspotontheweb.com">mark@myspotontheweb.com</a></p></li></ul></div></section></div></div><script src="reveal.js/lib/js/head.min.js"></script><script src="reveal.js/js/reveal.js"></script><script>// See https://github.com/hakimel/reveal.js#configuration for a full list of configuration options
+Reveal.initialize({
+  // Display controls in the bottom right corner
+  controls: true,
+  // Display a presentation progress bar
+  progress: true,
+  // Set a per-slide timing for speaker notes, null means none
+  defaultTiming: null,
+  // Display the page number of the current slide
+  slideNumber: false,
+  // Push each slide change to the browser history
+  history: false,
+  // Enable keyboard shortcuts for navigation
+  keyboard: true,
+  // Enable the slide overview mode
+  overview: true,
+  // Vertical centering of slides
+  center: true,
+  // Enables touch navigation on devices with touch input
+  touch: true,
+  // Loop the presentation
+  loop: false,
+  // Change the presentation direction to be RTL
+  rtl: false,
+  // Randomizes the order of slides each time the presentation loads
+  shuffle: false,
+  // Turns fragments on and off globally
+  fragments: true,
+  // Flags if the presentation is running in an embedded mode,
+  // i.e. contained within a limited portion of the screen
+  embedded: false,
+  // Flags if we should show a help overlay when the questionmark
+  // key is pressed
+  help: true,
+  // Flags if speaker notes should be visible to all viewers
+  showNotes: false,
+  // Global override for autolaying embedded media (video/audio/iframe)
+  // - null: Media will only autoplay if data-autoplay is present
+  // - true: All media will autoplay, regardless of individual setting
+  // - false: No media will autoplay, regardless of individual setting
+  autoPlayMedia: null,
+  // Number of milliseconds between automatically proceeding to the
+  // next slide, disabled when set to 0, this value can be overwritten
+  // by using a data-autoslide attribute on your slides
+  autoSlide: 0,
+  // Stop auto-sliding after user input
+  autoSlideStoppable: true,
+  // Enable slide navigation via mouse wheel
+  mouseWheel: false,
+  // Hides the address bar on mobile devices
+  hideAddressBar: true,
+  // Opens links in an iframe preview overlay
+  previewLinks: false,
+  // Theme (e.g., beige, black, league, night, serif, simple, sky, solarized, white)
+  // NOTE setting the theme in the config no longer works in reveal.js 3.x
+  //theme: Reveal.getQueryHash().theme || 'black',
+  // Transition style (e.g., none, fade, slide, convex, concave, zoom)
+  transition: Reveal.getQueryHash().transition || 'slide',
+  // Transition speed (e.g., default, fast, slow)
+  transitionSpeed: 'default',
+  // Transition style for full page slide backgrounds (e.g., none, fade, slide, convex, concave, zoom)
+  backgroundTransition: 'fade',
+  // Number of slides away from the current that are visible
+  viewDistance: 3,
+  // Parallax background image (e.g., "'https://s3.amazonaws.com/hakim-static/reveal-js/reveal-parallax-1.jpg'")
+  parallaxBackgroundImage: '',
+  // Parallax background size in CSS syntax (e.g., "2100px 900px")
+  parallaxBackgroundSize: '',
+
+  // The "normal" size of the presentation, aspect ratio will be preserved
+  // when the presentation is scaled to fit different resolutions. Can be
+  // specified using percentage units.
+  width: 960,
+  height: 700,
+
+  // Factor of the display size that should remain empty around the content
+  margin: 0.1,
+
+  // Bounds for smallest/largest possible scale to apply to content
+  minScale: 0.2,
+  maxScale: 1.5,
+
+  // Optional libraries used to extend on reveal.js
+  dependencies: [
+      { src: 'reveal.js/lib/js/classList.js', condition: function() { return !document.body.classList; } },
+      { src: 'reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+      { src: 'reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+      
+      { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true },
+      { src: 'reveal.js/plugin/notes/notes.js', async: true }
+  ]
+});</script></body></html>

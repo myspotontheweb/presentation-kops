@@ -1,0 +1,138 @@
+
+= Running Kubernetes in production, using Kops 
+
+Mark O'Connor, Teamwork
+
+== But what did Kubernetes ever do for us?
+
+image::https://i.ytimg.com/vi/Y7tvauOJMHo/hqdefault.jpg[]
+
+=== Clouds
+
+image::http://3thlkd3wpu0u1x0qbt19cxc8-wpengine.netdna-ssl.com/wp-content/uploads/2015/05/cloudstorage.jpg[]
+
+* Scaling up is hard 
+* Applications can be spread across lots of servers
+
+=== Resiliency
+
+image::http://www.maxta.com/wp-content/uploads/disasterrecovery-300x265.gif[]
+
+* Automate recovery
+* Relocatable workloads
+
+
+=== Efficient workload placement
+
+image::https://storage.googleapis.com/cdn.thenewstack.io/media/2016/05/command-after-1024x522.gif[]
+
+
+=== Google's solution
+
+image::https://upload.wikimedia.org/wikipedia/en/a/a1/Picard_as_Locutus.jpg[]
+
+Datacenter operating system managing container workloads
+
+=== Kubernetes
+
+* Borg's little brother, originally called "Seven of Nine"!
+* Version 2 of something Google has been running for a while
+* Designed to scale out Docker, but no longer dependent on a single container runtime
+
+== Meanwhile at Teamwork
+
+* Using Kubernetes in production for approx 18 months
+* Use the community **kops** tool to standup HA clusters on AWS infrastructure
+* Still evaluating EKS
+
+=== Why Kops?
+
+* Simple to use
+* Robust and resilient
+* With helm supports rollback
+* Relies on AWS constructs such as Autoscalling groups to provide resiliency across AZs
+* Supports spot instances
+
+=== How big?
+
+* Operate in two AWS regions, with a Kubernetes cluster in each
+* Each cluster is HA with approx 30 worker nodes
+
+== Demo time
+
+Go Teamwork!
+
+=== Cluster manifest
+
+```
+kops create cluster --name moc-dev1.k8s.local \
+   --master-zones us-east-1b \
+   --master-size r4.large \
+   --zones us-east-1b \
+   --node-size r4.xlarge \
+   --node-count 2 \
+   --cloud-labels TWApp=Kubernetes \
+   --admin-access 77.107.218.234/32 \
+   --vpc $VPC \
+   --authorization RBAC \
+   --dry-run \
+   -o yaml > moc-dev1.k8s.local.clusterspec.yaml
+```
+
+=== Go!
+
+Write the spec to the S3 backend
+
+```
+kops create -f $NAME.clusterspec.yaml
+kops create secret --name $NAME sshpublickey admin -i ~/.ssh/clusterkey.pub
+```
+
+Generate all the AWS resources
+
+```
+kops update cluster --name $NAME --yes
+```
+
+=== Wait...
+
+```
+kops validate cluster --name $NAME 
+```
+
+=== Post installation
+
+Install helm
+
+```
+kubectl -n kube-system create serviceaccount tiller
+kubectl create clusterrolebinding cluster-admin-tiller \
+   --clusterrole=cluster-admin \
+   --serviceaccount=kube-system:tiller
+
+helm init --service-account tiller
+```
+
+=== Post installation
+
+Install the cluster services
+
+```
+helmfile apply --auto-approve
+```
+
+== Time for a second demo??
+
+=== Upgrade
+
+```
+kops-1.10.1 upgrade cluster --name $NAME
+kops-1.10.1 update cluster --name $NAME --yes
+kops-1.10.1 rolling-update cluster --name $NAME --yes
+```
+
+== How you enjoyed the presentation
+
+* Mark O'Connor
+* mark@myspotontheweb.com
+
