@@ -42,15 +42,15 @@ Datacenter operating system managing container workloads
 == Meanwhile at Teamwork
 
 * Using Kubernetes in production for approx 18 months
-* Use the community **kops** tool to standup HA clusters on AWS infrastructure
+* Use the community https://github.com/kubernetes/kops[kops] tool to standup HA clusters on AWS infrastructure
 * Still evaluating EKS
 
 === Why Kops?
 
 * Simple to use
-* Robust and resilient
-* With helm supports rollback
-* Relies on AWS constructs such as Autoscalling groups to provide resiliency across AZs
+* Robust and resilient. Relies on AWS constructs such as Autoscaling groups to provide resiliency across AZs
+* Supports HA configuration of Kubernetes
+* Combined with helm supports application rollbacks
 * Supports spot instances
 
 === How big?
@@ -64,6 +64,8 @@ Go Teamwork!
 
 === Cluster manifest
 
+* A file https://github.com/kubernetes/kops/blob/master/docs/cluster_spec.md[describing the cluster] we want to build
+
 ```
 kops create cluster --name moc-dev1.k8s.local \
    --master-zones us-east-1b \
@@ -72,29 +74,35 @@ kops create cluster --name moc-dev1.k8s.local \
    --node-size r4.xlarge \
    --node-count 2 \
    --cloud-labels TWApp=Kubernetes \
-   --admin-access 77.107.218.234/32 \
+   --admin-access XX.XX.XX.XX/32 \
    --vpc $VPC \
    --authorization RBAC \
    --dry-run \
    -o yaml > moc-dev1.k8s.local.clusterspec.yaml
 ```
 
-=== Go!
+=== Make it so
 
-Write the spec to the S3 backend
+* Write the spec to the S3 backend
 
 ```
 kops create -f $NAME.clusterspec.yaml
-kops create secret --name $NAME sshpublickey admin -i ~/.ssh/clusterkey.pub
 ```
 
-Generate all the AWS resources
+* Specify an SSH key to be used 
+
+```
+kops create secret --name $NAME sshpublickey admin \
+   -i ~/.ssh/clusterkey.pub
+```
+
+* Generate all the AWS resources
 
 ```
 kops update cluster --name $NAME --yes
 ```
 
-=== Wait...
+=== Wait for it...
 
 ```
 kops validate cluster --name $NAME 
@@ -102,7 +110,7 @@ kops validate cluster --name $NAME
 
 === Post installation
 
-Install helm
+* Install https://helm.sh/[helm]
 
 ```
 kubectl -n kube-system create serviceaccount tiller
@@ -115,15 +123,18 @@ helm init --service-account tiller
 
 === Post installation
 
-Install the cluster services
+* Install the cluster services using https://github.com/roboll/helmfile[helmfile] a tool that deploys helm charts
 
 ```
 helmfile apply --auto-approve
 ```
 
+
 == Time for a second demo??
 
 === Upgrade
+
+* Upgrade Kubernetes in place from version 1.9 to 1.10
 
 ```
 kops-1.10.1 upgrade cluster --name $NAME
@@ -131,7 +142,7 @@ kops-1.10.1 update cluster --name $NAME --yes
 kops-1.10.1 rolling-update cluster --name $NAME --yes
 ```
 
-== How you enjoyed the presentation
+== Hope you enjoyed the presentation
 
 * Mark O'Connor
 * mark@myspotontheweb.com
